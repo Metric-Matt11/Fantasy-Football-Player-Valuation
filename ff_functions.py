@@ -23,7 +23,7 @@ def player_scrape(begin_year, end_year):
     begin_year : int
         The first year to scrape data from
     end_year : int 
-        The last year to scrape data from
+        The last year to scrape data fromj
 
     Returns:
     -------
@@ -57,6 +57,9 @@ def player_scrape(begin_year, end_year):
     df_all['Tm'] = df_all['Tm'].replace('TAM', 'TB')
     df_all['Tm'] = df_all['Tm'].replace('LVR', 'LV')
     df_all['Tm'] = df_all['Tm'].replace('NWE', 'NE')
+    df_all['Tm'] = df_all['Tm'].replace('SDG', 'LAC')
+    df_all['Tm'] = df_all['Tm'].replace('STL', 'LAR')
+    df_all['Tm'] = df_all['Tm'].replace('WAS', 'WSH')
     df_all = df_all.apply(pd.to_numeric, errors='ignore')
 
     # Grouping data by team and year to get sum of TD and Tgt
@@ -243,6 +246,7 @@ def qb_adv_stats(begin_year, end_year):
     df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('TAM', 'TB')
     df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('LVR', 'LV')
     df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('NWE', 'NE')
+    df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('WAS', 'WSH')
     df_qb_adv = df_qb_adv[df_qb_adv['Pos'] == 'QB']
     # Gettting the sum of OnTgt and Att per team and year
     # Higher the number the more accurate passes the team has

@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+from bs4 import BeautifulSoup
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestRegressor
@@ -61,44 +63,24 @@ df_te = df_te.merge(df_schedule, how='left', left_on=['Tm', 'Year'], right_on=['
 # Joining df_qb_adv_team to df_wr
 df_wr = df_wr.merge(df_qb_adv_team, how='left', left_on=['Tm', 'Year'], right_on=['Tm', 'Year'])
 
-# Adding a column that looks at how many years of data we have prior to each year
-df_wr['Years_of_data'] = df_wr.groupby('Player')['Year'].cumcount(ascending=True)
+# Averaging a the PPR score for each player of the last 2 years
+# This will be used as the target variable
 
-# Creating columns that looks at the 2 years prior that the year and averages the PPR Score, TD_rec, Tgt_share, TD_share, Team_TD_norm, Team_OnTgt_norm and VBD. The oldest year should be all nan's
-# If the player only has 1 year of data, the column will just be the previous year's data. Use if statement to check if the player has 2 years of data
-if df_wr['Years_of_data'].max() == 3:
-    df_wr['PPR_2yr_avg'] = (df_wr.groupby('Player')['PPR'].shift(1) + df_wr.groupby('Player')['PPR'].shift(2))/2
-    df_wr['TD_rec_2yr_avg'] = (df_wr.groupby('Player')['TD_rec'].shift(1) + df_wr.groupby('Player')['TD_rec'].shift(2))/2
-    df_wr['Tgt_share_2yr_avg'] = (df_wr.groupby('Player')['Tgt_share'].shift(1) + df_wr.groupby('Player')['Tgt_share'].shift(2))/2
-    df_wr['TD_share_2yr_avg'] = (df_wr.groupby('Player')['TD_share'].shift(1) + df_wr.groupby('Player')['TD_share'].shift(2))/2
-    df_wr['Team_TD_norm_2yr_avg'] = (df_wr.groupby('Player')['Team_TD_norm'].shift(1) + df_wr.groupby('Player')['Team_TD_norm'].shift(2))/2
-    df_wr['Team_OnTgt_norm_2yr_avg'] = (df_wr.groupby('Player')['Team_OnTgt_norm'].shift(1) + df_wr.groupby('Player')['Team_OnTgt_norm'].shift(2))/2
-    df_wr['VBD_2yr_avg'] = (df_wr.groupby('Player')['VBD'].shift(1) + df_wr.groupby('Player')['VBD'].shift(2))/2
-elif df_wr['Years_of_data'].max() == 2 or df_wr['Years_of_data'].max() == 1:
-    df_wr['PPR_2yr_avg'] = df_wr.groupby('Player')['PPR'].shift(1)
-    df_wr['TD_rec_2yr_avg'] = df_wr.groupby('Player')['TD_rec'].shift(1)
-    df_wr['Tgt_share_2yr_avg'] = df_wr.groupby('Player')['Tgt_share'].shift(1)
-    df_wr['TD_share_2yr_avg'] = df_wr.groupby('Player')['TD_share'].shift(1)
-    df_wr['Team_TD_norm_2yr_avg'] = df_wr.groupby('Player')['Team_TD_norm'].shift(1)
-    df_wr['Team_OnTgt_norm_2yr_avg'] = df_wr.groupby('Player')['Team_OnTgt_norm'].shift(1)
-    df_wr['VBD_2yr_avg'] = df_wr.groupby('Player')['VBD'].shift(1)
-else:
-    df_wr['PPR_2yr_avg'] = 0
-    df_wr['TD_rec_2yr_avg'] = 0
-    df_wr['Tgt_share_2yr_avg'] = 0
-    df_wr['TD_share_2yr_avg'] = 0
-    df_wr['Team_TD_norm_2yr_avg'] = 0
-    df_wr['Team_OnTgt_norm_2yr_avg'] = 0
-    df_wr['VBD_2yr_avg'] = 0
+# Creating a df from the first 2 years of the dataset
+df_wr_2 = df_wr[df_wr['Year'] < max(df_wr['Year'])]
+df_wr_2['PPR_2yr_avg'] = df_wr_2.groupby('Player')['PPR'].transform(lambda x: x.mean())
 
-# For now going to drop any player that Years_of_data is < 3
-df_wr = df_wr.groupby('Player').filter(lambda x: x['Years_of_data'].max() == 3)
-wr_model = df_wr[['Year', 'Age', 'PPR_2yr_avg', 'TD_rec_2yr_avg', 'Tgt_share_2yr_avg', 'TD_share_2yr_avg', 'Team_TD_norm_2yr_avg', 'Team_OnTgt_norm_2yr_avg', 'VBD_2yr_avg', 'PPR']]
+# Joining the 2 year average to the current year
+df_wr = df_wr[df_wr['Year'] > min(df_wr['Year'])]
+df_wr = df_wr.merge(df_wr_2[['Player', 'PPR_2yr_avg']], how='left', left_on=['Player'], right_on=['Player'])
+
+# Dropping duplicate rows
+df_wr = df_wr.drop_duplicates(subset=['Player', 'Year'], keep='first')
+
+# Figure out how to use 2yr ppr avg
+wr_model = df_wr[['Year', 'Age', 'TD_rec', 'TD_share', 'Tgt_share', 'Team_TD_norm', 'Pass_QB_def_norm_sum', 'Team_OnTgt_norm', 'PPR']]
 
 result, r2, mse, wr_coef = ff.evaluate_model(wr_model, 2022, 2021, 'PPR', RandomForestRegressor())
 
 print(r2, mse)
 print(result)
-
-# q: explain what mse is
-# a: mean squared error. It is the average of the squared differences between the predicted and actual values. It is a measure of how close a fitted line is to actual data points. The smaller the MSE, the closer the fit is to the data points.

@@ -62,23 +62,24 @@ df_te = df_te.merge(df_schedule, how='left', left_on=['Tm', 'Year'], right_on=['
 
 # Joining df_qb_adv_team to df_wr
 df_wr = df_wr.merge(df_qb_adv_team, how='left', left_on=['Tm', 'Year'], right_on=['Tm', 'Year'])
+df_wr['Yds_rec/Att'] = df_wr['Yds_rec'] / df_wr['Team_Att']
 
-# Averaging a the PPR score for each player of the last 2 years
-# This will be used as the target variable
+# Creating a column with the count of how many years of data we have for each player
+df_wr['Years'] = df_wr.groupby('Player')['Year'].transform('count')
+df_wr = df_wr[df_wr['Years'] >= 4]
 
-# Creating a df from the first 2 years of the dataset
-df_wr_2 = df_wr[df_wr['Year'] < max(df_wr['Year'])]
-df_wr_2['PPR_2yr_avg'] = df_wr_2.groupby('Player')['PPR'].transform(lambda x: x.mean())
-
-# Joining the 2 year average to the current year
-df_wr = df_wr[df_wr['Year'] > min(df_wr['Year'])]
-df_wr = df_wr.merge(df_wr_2[['Player', 'PPR_2yr_avg']], how='left', left_on=['Player'], right_on=['Player'])
-
-# Dropping duplicate rows
-df_wr = df_wr.drop_duplicates(subset=['Player', 'Year'], keep='first')
+# Creating a column that has the average of the previous 2 years of data exluding the current year
+df_wr['TD_rec_2yr_avg'] = df_wr.groupby('Player')['TD_rec'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['TD_share_2yr_avg'] = df_wr.groupby('Player')['TD_share'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Tgt_share_2yr_avg'] = df_wr.groupby('Player')['Tgt_share'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Team_TD_norm_2yr_avg'] = df_wr.groupby('Player')['Team_TD_norm'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Pass_QB_def_norm_sum_2yr_avg'] = df_wr.groupby('Player')['Pass_QB_def_norm_sum'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Team_OnTgt_norm_2yr_avg'] = df_wr.groupby('Player')['Team_OnTgt_norm'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Yds_rec/Att_2yr_avg'] = df_wr.groupby('Player')['Yds_rec/Att'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['PPR_2yr_avg'] = df_wr.groupby('Player')['PPR'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
 
 # Figure out how to use 2yr ppr avg
-wr_model = df_wr[['Year', 'Age', 'TD_rec', 'TD_share', 'Tgt_share', 'Team_TD_norm', 'Pass_QB_def_norm_sum', 'Team_OnTgt_norm', 'PPR']]
+wr_model = df_wr[['Player', 'Year', 'Age', 'Pass_QB_def_norm_sum', 'TD_rec_2yr_avg', 'Tgt_share_2yr_avg', 'Team_TD_norm_2yr_avg', 'Team_OnTgt_norm_2yr_avg', 'Yds_rec/Att_2yr_avg', 'PPR_2yr_avg', 'PPR']]
 
 result, r2, mse, wr_coef = ff.evaluate_model(wr_model, 2022, 2021, 'PPR', RandomForestRegressor())
 

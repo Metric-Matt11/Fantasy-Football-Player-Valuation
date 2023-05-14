@@ -70,7 +70,7 @@ def player_scrape(begin_year, end_year):
     df_rb = df_rb[['Player', 'Tm', 'Age', 'Att_rush', 'Tgt', 'TD_rush', 'TD_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_rb = df_rb.reset_index(drop=True)
     df_wr = df_all[df_all['FantPos'] == 'WR']
-    df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
+    df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Yds_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_wr = df_wr.reset_index(drop=True)
     df_te = df_all[df_all['FantPos'] == 'TE']
     df_te = df_te[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
@@ -244,13 +244,12 @@ def qb_adv_stats(begin_year, end_year):
     df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('LVR', 'LV')
     df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('NWE', 'NE')
     df_qb_adv = df_qb_adv[df_qb_adv['Pos'] == 'QB']
-    # Gettting the sum of OnTgt and Att per team and year
-    # Higher the number the more accurate passes the team has
-    df_qb_adv['Team_OnTgt_sum'] = df_qb_adv.groupby(['Tm', 'Year'])['OnTgt'].transform('sum')
-    df_qb_adv['Team_OnTgt_norm'] = df_qb_adv.groupby('Year')['Team_OnTgt_sum'].transform(lambda x: (x - x.mean()) / x.std())
 
-    # Creating a new dataframe from df_qb_adv that is grouped by team and year with the Team_OnTgt_norm column
-    df_qb_adv_team = df_qb_adv.groupby(['Tm', 'Year'])['Team_OnTgt_norm'].mean().reset_index()
+    # Gettting the sum of OnTgt and Att per team and year
+    df_qb_adv_team = df_qb_adv.groupby(['Tm', 'Year'])['OnTgt', 'Att'].sum()
+    df_qb_adv_team = df_qb_adv_team.reset_index()
+    df_qb_adv_team = df_qb_adv_team.rename(columns={'OnTgt': 'Team_OnTgt', 'Att': 'Team_Att'})
+    df_qb_adv_team['Team_OnTgt_norm'] = df_qb_adv_team.groupby('Year')['Team_OnTgt'].transform(lambda x: (x - x.mean()) / x.std())
 
     return df_qb_adv, df_qb_adv_team
 
@@ -271,7 +270,11 @@ def evaluate_model(df, df_testing_year, df_training_year, target, model):
     model : object
         The model to use for the evaluation
     """
+    # Setting player as the index
+    df = df.set_index('Player')
+
     # Split the data into training and testing sets based on the year
+
     df_train = df[df['Year'] == df_training_year]
     df_test = df[df['Year'] == df_testing_year]
     

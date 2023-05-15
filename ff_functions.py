@@ -60,20 +60,20 @@ def player_scrape(begin_year, end_year):
     df_all = df_all.apply(pd.to_numeric, errors='ignore')
 
     # Grouping data by team and year to get sum of TD and Tgt
-    df_all['Team_TD'] = df_all.groupby(['Tm', 'Year'])['TD_total'].transform('sum')
+    df_all['Team_Yds'] = df_all.groupby(['Tm', 'Year'])['Yds_pass'].transform('sum') + df_all.groupby(['Tm', 'Year'])['Yds_rush'].transform('sum')
     df_all['Team_Tgt'] = df_all.groupby(['Tm', 'Year'])['Tgt'].transform('sum')
 
     df_qb = df_all[df_all['FantPos'] == 'QB']
     df_qb = df_qb[['Player', 'Tm', 'Age', 'Yds_pass', 'Yds_rush', 'TD_pass', 'TD_rush', 'VBD', 'PPR', 'Year']]
     df_qb = df_qb.reset_index(drop=True)
     df_rb = df_all[df_all['FantPos'] == 'RB']
-    df_rb = df_rb[['Player', 'Tm', 'Age', 'Att_rush', 'Tgt', 'TD_rush', 'TD_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
+    df_rb = df_rb[['Player', 'Tm', 'Age', 'Att_rush', 'Tgt', 'TD_rush', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_rb = df_rb.reset_index(drop=True)
     df_wr = df_all[df_all['FantPos'] == 'WR']
-    df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Yds_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
+    df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Yds_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_wr = df_wr.reset_index(drop=True)
     df_te = df_all[df_all['FantPos'] == 'TE']
-    df_te = df_te[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_TD', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
+    df_te = df_te[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_te = df_te.reset_index(drop=True)
 
     # Removing the symbols "*" and "+" from the player names using a loop
@@ -175,6 +175,77 @@ def team_def_scrape(begin_year, end_year):
 
     return df_def
 
+def redzone_scrape(begin_year, end_year):
+    """
+    This function scrapes https://www.pro-football-reference.com/years/ for redzone passing, rushing, receiving and defense data
+
+    Parameters:
+    ----------
+    begin_year : int
+        The first year to scrape data from
+    end_year : int
+        The last year to scrape data from
+
+    Returns:
+    -------
+    df : DataFrame
+        A dataframe with the compiled redzone data
+    """
+    # Creating a for loop to go through passing, rushing and receiving data
+    for y in ['passing', 'rushing', 'receiving']:
+        if y == 'passing':
+            column_headers = ['Tm', 'Cmp_20', 'Att_20', 'Cmp%_20', 'Yds_20', 'TD_20', 'Int_20', 'Cmp_10', 'Att_10', 'Cmp%_10', 'Yds_10', 'TD_10', 'Int_10', 'Highlights']
+        elif y == 'rushing':
+            column_headers = ['Tm', 'Att_20', 'Yds_20', 'TD_20', '%Rush_20', 'Att_10', 'Yds_10', 'TD_10', '%Rush_10', 'Att_5', 'Yrds_5', 'TD_5', '%Rush_5', 'Highlights']
+        else:
+            column_headers = ['Tm', 'Tgt_20', 'Rec_20', 'Ctch%_20', 'Yds_20', 'TD_20', '%Tgt_20', 'Tgt_10', 'Rec_10', 'Ctch%_10', 'Yds_10', 'TD_10', '%Tgt_10', 'Highlights']
+        
+        for x in range(begin_year, end_year + 1):
+            url = 'https://www.pro-football-reference.com/years/' + str(x) + '/redzone-' + str(y) + '.htm'
+            page = requests.get(url)
+            soup = BeautifulSoup(page.text, 'html.parser')
+            table = soup.find('table', {'id': 'fantasy_rz'})
+            table_head = table.find('thead')
+            table_body = table.find('tbody')
+            table_head_rows = table_head.find_all('tr')
+            table_body_rows = table_body.find_all('tr')
+            column_headers = ['Tm', 'Cmp_20', 'Att_20', 'Cmp%_20', 'Yds_20', 'TD_20', 'Int_20', 'Cmp_10', 'Att_10', 'Cmp%_10', 'Yds_10', 'TD_10', 'Int_10', 'Highlights']
+            data_rows_player = [[td.getText() for td in table_body_rows[i].find_all('th')] for i in range(len(table_body_rows))]
+            data_rows = [[td.getText() for td in table_body_rows[i].find_all('td')] for i in range(len(table_body_rows))]
+            df = pd.DataFrame(data_rows, columns=column_headers[0:])
+            df['Player'] = data_rows_player
+            df = df.dropna()
+            df = df.replace('', 0)
+            df = df.apply(pd.to_numeric, errors='ignore')
+            df['Year'] = x
+            if x == begin_year:
+                df_name = df
+            else:
+                df_name = df_name.append(df)
+            df_name['Tm'] = df_name['Tm'].replace('Los Angeles Rams', 'LAR')
+            df_name['Tm'] = df_name['Tm'].replace('Los Angeles Chargers', 'LAC')
+            df_name['Tm'] = df_name['Tm'].replace('New England Patriots', 'NE')
+            df_name['Tm'] = df_name['Tm'].replace('New Orleans Saints', 'NO')
+            df_name['Tm'] = df_name['Tm'].replace('New York Giants', 'NYG')
+            df_name['Tm'] = df_name['Tm'].replace('New York Jets', 'NYJ')
+            df_name['Tm'] = df_name['Tm'].replace('San Francisco 49ers', 'SF')
+            df_name['Tm'] = df_name['Tm'].replace('Tampa Bay Buccaneers', 'TB')
+            df_name['Tm'] = df_name['Tm'].replace('Tennessee Titans', 'TEN')
+            df_name['Tm'] = df_name['Tm'].replace('Washington Football Team', 'WSH')
+            df_name['Tm'] = df_name['Tm'].replace('Arizona Cardinals', 'ARI')
+            df_name['Tm'] = df_name['Tm'].replace('Atlanta Falcons', 'ATL')
+            df_name['Tm'] = df_name['Tm'].replace('Baltimore Ravens', 'BAL')
+            df_name['Tm'] = df_name['Tm'].replace('Buffalo Bills', 'BUF')
+            df_name['Tm'] = df_name['Tm'].replace('Carolina Panthers', 'CAR')
+        if y == 'passing':
+            df_rz_pass = df_name
+        elif y == 'rushing':
+            df_rz_rush = df_name
+        else:   
+            df_rz_rec = df_name
+        
+    return df_rz_pass, df_rz_rush, df_rz_rec
+
 def nfl_schedule(begin_year, end_year):
     """
     This function looks in the file path for xlsx files that meet the criteria and compiles them into one dataframe
@@ -245,6 +316,12 @@ def qb_adv_stats(begin_year, end_year):
     df_qb_adv['Tm'] = df_qb_adv['Tm'].replace('NWE', 'NE')
     df_qb_adv = df_qb_adv[df_qb_adv['Pos'] == 'QB']
 
+    # Getting rid of all special characters in the player names
+    df_qb_adv['Player'] = df_qb_adv['Player'].str.replace('*', '')
+    df_qb_adv['Player'] = df_qb_adv['Player'].str.replace('+', '')
+    df_qb_adv['Player'] = df_qb_adv['Player'].str.replace('\\', '')
+    df_qb_adv['Player'] = df_qb_adv['Player'].str.replace('\'', '')
+
     # Gettting the sum of OnTgt and Att per team and year
     df_qb_adv_team = df_qb_adv.groupby(['Tm', 'Year'])['OnTgt', 'Att'].sum()
     df_qb_adv_team = df_qb_adv_team.reset_index()
@@ -271,7 +348,7 @@ def evaluate_model(df, df_testing_year, df_training_year, target, model):
         The model to use for the evaluation
     """
     # Setting player as the index
-    df = df.set_index('Player')
+    df = df.set_index('Player_x')
 
     # Split the data into training and testing sets based on the year
 
@@ -300,7 +377,6 @@ def evaluate_model(df, df_testing_year, df_training_year, target, model):
     
     # Return the testing data frame and evaluation metrics
     return df_test, r2, mse, df_coef
-
 
 #testing the function
 # q: how to get r2 score?

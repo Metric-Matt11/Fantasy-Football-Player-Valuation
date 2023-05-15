@@ -22,6 +22,7 @@ df_qb, df_rb, df_wr, df_te = ff.player_scrape(2019, 2022)
 df_def = ff.team_def_scrape(2019, 2022)
 df_schedule = ff.nfl_schedule(2019, 2022)
 df_qb_adv, df_qb_adv_team = ff.qb_adv_stats(2019, 2022)
+df_rz_pass, df_rz_rush, df_rz_rec = ff.rz_stats(2019, 2022)
 
 #Dropping players whose team is not in the nfl_schedule dataframe
 #This should drop players with no team or multiple teams
@@ -30,11 +31,26 @@ df_rb = df_rb[df_rb['Tm'].isin(df_schedule['TEAM'])]
 df_wr = df_wr[df_wr['Tm'].isin(df_schedule['TEAM'])]
 df_te = df_te[df_te['Tm'].isin(df_schedule['TEAM'])]
 
+# Joining df_qb_adv to df_qb on player and year
+df_qb = df_qb.merge(df_qb_adv[['Player', 'Year', 'OnTgt']], how='left', left_on=['Player', 'Year'], right_on=['Player', 'Year'])
+
+# Creating a df with qbs that have the most OnTgts for each team and year
+starting_qb_team = df_qb.groupby(['Tm', 'Year'])['OnTgt'].max().reset_index()
+starting_qb = df_qb.merge(starting_qb_team, how='inner', left_on=['Tm', 'Year', 'OnTgt'], right_on=['Tm', 'Year', 'OnTgt'])
+
+# Creating a column that is the OnTgt for a players previous year
+starting_qb['OnTgt_prev'] = starting_qb.groupby('Player')['OnTgt'].shift(1)
+starting_qb['OnTgt_prev_norm'] = starting_qb.groupby('Player')['OnTgt_prev'].transform(lambda x: (x - x.mean()) / x.std())
+starting_qb = starting_qb.fillna(0)
+
+# Joining starting starting_qb to df_wr on team and year.
+df_wr = df_wr.merge(starting_qb[['Tm', 'Year', 'Player', 'OnTgt_prev_norm']], how='left', left_on=['Tm', 'Year'], right_on=['Tm', 'Year'])
+
 # Creating WR features
 df_wr['Tgt_share'] = df_wr['Tgt'] / df_wr['Team_Tgt']
-df_wr['TD_share'] = df_wr['TD_rec'] / df_wr['Team_TD']
-df_wr['Team_TD_norm'] = df_wr.groupby('Year')['Team_TD'].transform(lambda x: (x - x.mean()) / x.std())
-df_wr = df_wr.reset_index(drop=True)
+
+#Replace TD_share with Endzone and Redzone targets
+#df_wr['TD_share'] = df_wr['TD_rec'] / df_wr['Team_TD']
 
 # Joining df_def_sched by the opponent that week and year to df_schedule
 # Using a loop to go through each week and year
@@ -65,23 +81,24 @@ df_wr = df_wr.merge(df_qb_adv_team, how='left', left_on=['Tm', 'Year'], right_on
 df_wr['Yds_rec/Att'] = df_wr['Yds_rec'] / df_wr['Team_Att']
 
 # Creating a column with the count of how many years of data we have for each player
-df_wr['Years'] = df_wr.groupby('Player')['Year'].transform('count')
+df_wr['Years'] = df_wr.groupby('Player_x')['Year'].transform('count')
 df_wr = df_wr[df_wr['Years'] >= 4]
 
 # Creating a column that has the average of the previous 2 years of data exluding the current year
-df_wr['TD_rec_2yr_avg'] = df_wr.groupby('Player')['TD_rec'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['TD_share_2yr_avg'] = df_wr.groupby('Player')['TD_share'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['Tgt_share_2yr_avg'] = df_wr.groupby('Player')['Tgt_share'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['Team_TD_norm_2yr_avg'] = df_wr.groupby('Player')['Team_TD_norm'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['Pass_QB_def_norm_sum_2yr_avg'] = df_wr.groupby('Player')['Pass_QB_def_norm_sum'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['Team_OnTgt_norm_2yr_avg'] = df_wr.groupby('Player')['Team_OnTgt_norm'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['Yds_rec/Att_2yr_avg'] = df_wr.groupby('Player')['Yds_rec/Att'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
-df_wr['PPR_2yr_avg'] = df_wr.groupby('Player')['PPR'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['TD_rec_2yr_avg'] = df_wr.groupby('Player_x')['TD_rec'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+#df_wr['TD_share_2yr_avg'] = df_wr.groupby('Player_x')['TD_share'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Tgt_share_2yr_avg'] = df_wr.groupby('Player_x')['Tgt_share'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Team_Yds_2yr_avg'] = df_wr.groupby('Player_x')['Team_Yds'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Pass_QB_def_norm_sum_2yr_avg'] = df_wr.groupby('Player_x')['Pass_QB_def_norm_sum'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Team_OnTgt_norm_2yr_avg'] = df_wr.groupby('Player_x')['Team_OnTgt_norm'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['Yds_rec/Att_2yr_avg'] = df_wr.groupby('Player_x')['Yds_rec/Att'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
+df_wr['PPR_2yr_avg'] = df_wr.groupby('Player_x')['PPR'].transform(lambda x: (x.shift(1) + x.shift(2)) / 2)
 
 # Figure out how to use 2yr ppr avg
-wr_model = df_wr[['Player', 'Year', 'Age', 'Pass_QB_def_norm_sum', 'TD_rec_2yr_avg', 'Tgt_share_2yr_avg', 'Team_TD_norm_2yr_avg', 'Team_OnTgt_norm_2yr_avg', 'Yds_rec/Att_2yr_avg', 'PPR_2yr_avg', 'PPR']]
+wr_model = df_wr[['Player_x', 'Year', 'Age', 'Pass_QB_def_norm_sum', 'TD_rec_2yr_avg', 'Tgt_share_2yr_avg', 'Team_Yds_2yr_avg', 'OnTgt_prev_norm', 'Yds_rec/Att_2yr_avg', 'PPR_2yr_avg', 'PPR']]
 
 result, r2, mse, wr_coef = ff.evaluate_model(wr_model, 2022, 2021, 'PPR', RandomForestRegressor())
 
 print(r2, mse)
 print(result)
+

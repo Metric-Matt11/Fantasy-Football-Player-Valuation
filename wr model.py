@@ -7,9 +7,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import dtale
-from sklearn.linear_model import LinearRegression
-from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.svm import SVR
@@ -126,8 +123,9 @@ df_wr = df_wr.drop(columns=['OvRank_prev'])
 #df_wr = df_wr.drop(columns=['Yds_10_prev'])
 #df_wr = df_wr.drop(columns=['Tgt_share_prev'])
 #df_wr = df_wr.drop(columns=['Tier_1_Sign'])
-df_wr = df_wr.drop(columns=['PPR_prev'])
+#df_wr = df_wr.drop(columns=['PPR_prev'])
 #df_wr = df_wr.drop(columns=['PPR_2yr_prev'])
+#df_wr = df_wr.drop(columns=['PosRank_prev'])
 
 # Run model evaluation function 10 times and average the and r2 values and add average PPR score to result dataframe
 result, r2, mae, wr_coef, best = ff.model_evaluation(df_wr, 2022, 'PPR', RandomForestRegressor())

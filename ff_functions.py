@@ -79,7 +79,7 @@ def player_scrape(begin_year, end_year):
     #df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'Rec', 'TD_rec', 'Yds_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_wr = df_wr.reset_index(drop=True)
     df_te = df_all[df_all['FantPos'] == 'TE']
-    df_te = df_te[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
+    #df_te = df_te[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_te = df_te.reset_index(drop=True)
 
     # Removing the symbols "*" and "+" from the player names using a loop
@@ -471,7 +471,7 @@ def model_evaluation(df, df_testing_year, target, model):
 
     # Creating grid search parameters
     param_grid = [{'model': [RandomForestRegressor()], 
-                    'model__n_estimators': [50, 100, 300, 500], 
+                    'model__n_estimators': [25, 50, 100, 300], 
                     'model__max_depth': [20, 30, 40],
                     'model__min_samples_split': [4, 5, 6],
                     'model__min_samples_leaf': [6, 8, 10],

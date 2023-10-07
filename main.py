@@ -181,9 +181,11 @@ def my_task():
     #Write a print statement that says the data has been updated and the time it was updated
     print('Data updated at ' + str(datetime.datetime.now()))
 
-scheduler = BlockingScheduler()
-scheduler.add_job(my_task, 'interval', seconds=5)
-scheduler.start()
+#scheduler = BlockingScheduler()
+#scheduler.add_job(my_task, 'interval', seconds=5)
+#scheduler.start()
+
+my_task()
 
 #################################################################################################################
 #Dash App

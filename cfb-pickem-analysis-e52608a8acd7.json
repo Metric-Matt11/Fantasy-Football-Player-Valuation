@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "cfb-pickem-analysis",
+  "private_key_id": "e52608a8acd757c2a9e4cde67b9f811126138688",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDTqXjRweeLnoZx\n9WQ8tbo4DFXb2efj9a3qC9v11EAOUK21M2t8Kpz3xwriYNIX9Z88HcIcSpaT24gE\ndRT05JLA8mX7+m2UIyjWG8lVVdiR8OtAQwroPyz62k74c9YQQ0JNRWZmEejMRUZW\nDx9yzg/IVdBMwb1ytKiyHW8RzlJnL86detABDC1FYrjwixfms088y3zmbA6a7daG\nWsEE2oAMJrNYIvfRvILlKBezslRM8KJUGHvfe+4ThrGYKdt9cvnSqOAfCSaE6yZw\nT0SnNXtCN6sMrpCw9eoUysVwLpQ5ZP1OTn7o67+SU3Nd1Xn1MeJJp+kcySz7EG8y\n5K8zVetzAgMBAAECggEANmxF75EvCxxIr3aMPnvvlMe/L9dYo6mg/SPte8kGa2fd\nMlE1WujOEXuxVcHVY2m5dsikB4g6LWxuDc9ZAxrejRQGmwKqOEPOFTdxzipTlDrh\nElXqsQrFcv68/W8zZF0W6C1nBemm9Rb+3dPnnypSro06EPJj1uGS2rFsxKRLVdJi\nSC0kXybl+YGHx9KbiwACx25v5wWm2MbJ7LhpOVp2UYKOpxRj2o3X4rdchVRZHfb6\nf8VZ66/JYa3qfKl596AnI5hLkWvFjXL4CMnxc9Ut9QWPaztfq7euBOoqBUalx7tj\nQPiBtOPFMEwvK1Hg4wh9IDMDxdEfrZjtiijIAa8Z6QKBgQDv5O3kJqLQg7+lrfq4\nAOGSCnsC27zqR936U3jvWrW743EefvVVy6nF7xw0WEwPvEe6MVXrBC0xjNbvUVpD\nOiouZgXnISjnonV0moONmkxfWb/UJInXlROoOOSvzTlthbkDj4fb/okUJkHn2J3p\ni7MQQqeXuA4y74NeniW0xR6p1QKBgQDh31BfeY8BkWj2KXniihyzGjOPstIOF5Nh\nsretY8d2TPGtrXSBJi2umKCRgeH8CKjmVO0bqkmZurrQ7ZbITF4JXap5mJngdo7z\nmtnqdqb/KWvQ4PX2siCMYby/hZDxrRNu4pZJBMRC/dCP08YnIg6YSZICabcE8SdC\n4V6VJ1vcJwKBgD5wlcLGk6Y2RJG5IQL3p769X5s02o0YO5zGUTnroFXRM0Y+wVid\ndAkC3ZJ6UQHffcPmx3guVB0LjX4o7JeG8ie1gl/Qb7cqv+ujtA4NVUeUMqvi/sXQ\nFZe5hzyC7Cmnnqpgl3oZXFCUTJ8t8JwzMl5PGxQQYhG76bOc8i+FByApAoGAdkF8\nyv/Rp3iCA59jeP/mVr75D9sHrukY+KWhFN6Qp5dRUSTnQlbCxA6UwpnFvzapdy4v\nlbRqJFpnRMufje6trSmk/1St+58W6OPCA8drV1xQXmPpYuePsu/Y6kz7vgxniD6J\ngGFGf+xzLVoq/IIQMhsSnsDKWYQIkjN8WYrpxTECgYAsj/D+XnSEmcJAr25aEQPO\nbZkIguSEejFxgarvW3d/HhxkJy3SH10x55zJiSC2cKP05Ix7RwdwJP/aFB9akueh\nrhijTptfcVlkZWvInPDhg1QHbvLnPVAbY7oOWfQtBbLHROZ43137vFui+khzQLIo\nXsWkYS1Wg59A+ctejtCkdg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "cfb-analyzer@cfb-pickem-analysis.iam.gserviceaccount.com",
+  "client_id": "105275513399702496834",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/cfb-analyzer%40cfb-pickem-analysis.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

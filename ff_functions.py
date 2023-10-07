@@ -18,6 +18,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error
+from sklearn.decomposition import PCA
+from xgboost import XGBRegressor
+from sklearn.svm import SVR
+import xlrd
 
 def player_scrape(begin_year, end_year):
     """
@@ -69,11 +73,15 @@ def player_scrape(begin_year, end_year):
     df_all['Team_Yds'] = df_all.groupby(['Tm', 'Year'])['Yds_pass'].transform('sum') + df_all.groupby(['Tm', 'Year'])['Yds_rush'].transform('sum')
     df_all['Team_Tgt'] = df_all.groupby(['Tm', 'Year'])['Tgt'].transform('sum')
 
+    # Grouping data by team and year to get sum of Att_rush and Yds_rush
+    df_all['Team_Att_rush'] = df_all.groupby(['Tm', 'Year'])['Att_rush'].transform('sum')
+    df_all['Team_Yds_rush'] = df_all.groupby(['Tm', 'Year'])['Yds_rush'].transform('sum')
+
     df_qb = df_all[df_all['FantPos'] == 'QB']
-    df_qb = df_qb[['Player', 'Tm', 'Age', 'Yds_pass', 'Yds_rush', 'TD_pass', 'TD_rush', 'VBD', 'PPR', 'Year']]
+    #df_qb = df_qb[['Player', 'Tm', 'Age', 'Yds_pass', 'Yds_rush', 'TD_pass', 'TD_rush', 'VBD', 'PPR', 'Year']]
     df_qb = df_qb.reset_index(drop=True)
     df_rb = df_all[df_all['FantPos'] == 'RB']
-    df_rb = df_rb[['Player', 'Tm', 'Age', 'Att_rush', 'Tgt', 'TD_rush', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
+    #df_rb = df_rb[['Player', 'Tm', 'Age', 'Att_rush', 'Tgt', 'TD_rush', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
     df_rb = df_rb.reset_index(drop=True)
     df_wr = df_all[df_all['FantPos'] == 'WR']
     #df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'Rec', 'TD_rec', 'Yds_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
@@ -283,10 +291,11 @@ def nfl_schedule(begin_year, end_year):
             df_schedule = df_schedule.append(df)
     return df_schedule
 
-def qb_adv_stats(begin_year, end_year):
+def qb_adv_stats(begin_year, end_year, table_id):
     """
     This function scrapes https://www.pro-football-reference.com/years/2022/passing_advanced.htm for advanced stats for QBs
-
+    The options are advanced_air_yards, advanced_accuracy and advanced_pressure
+    
     Parameters:
     ----------
     begin_year : int
@@ -303,12 +312,17 @@ def qb_adv_stats(begin_year, end_year):
         url = 'https://www.pro-football-reference.com/years/' + str(x) + '/passing_advanced.htm'
         page = requests.get(url)
         soup = BeautifulSoup(page.text, 'html.parser')
-        table = soup.find('table', {'id': 'advanced_accuracy'})
+        table = soup.find('table', {'id': table_id})
         table_head = table.find('thead')
         table_body = table.find('tbody')
         table_head_rows = table_head.find_all('tr')
         table_body_rows = table_body.find_all('tr')
-        column_headers = ['Player', 'Tm', 'Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds', 'Bats', 'ThAwy', 'Spikes', 'Drops', 'Drop%', 'BadTh', 'Bad%', 'OnTgt', 'OnTgt%']
+        if table_id == 'advanced_accuracy':
+            column_headers = ['Player', 'Tm', 'Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds', 'Bats', 'ThAwy', 'Spikes', 'Drops', 'Drop%', 'BadTh', 'Bad%', 'OnTgt', 'OnTgt%']
+        elif table_id == 'advanced_air_yards':
+            column_headers = ['Player', 'Tm', 'Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds', 'IAY', 'IAY/PA', 'CAY', 'CAY/Cmp', 'CAY/PA', 'YAC', 'YAC/Cmp']
+        elif table_id == 'advanced_pressure':
+            column_headers = ['Player', 'Tm', 'Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds', 'Sk', 'PktTime', 'Bltz', 'Hrry', 'Hits', 'Prss', 'Prss%', 'Scrm', 'Yds/Scr']
         data_rows = [[td.getText() for td in table_body_rows[i].find_all('td')] for i in range(len(table_body_rows))]
         df = pd.DataFrame(data_rows, columns=column_headers[0:])
         df = df.dropna()
@@ -334,15 +348,9 @@ def qb_adv_stats(begin_year, end_year):
     df_qb_adv['Player'] = df_qb_adv['Player'].str.replace('\\', '')
     df_qb_adv['Player'] = df_qb_adv['Player'].str.replace('\'', '')
 
-    # Gettting the sum of OnTgt and Att per team and year
-    df_qb_adv_team = df_qb_adv.groupby(['Tm', 'Year'])['OnTgt', 'Att'].sum()
-    df_qb_adv_team = df_qb_adv_team.reset_index()
-    df_qb_adv_team = df_qb_adv_team.rename(columns={'OnTgt': 'Team_OnTgt', 'Att': 'Team_Att'})
-    df_qb_adv_team['Team_OnTgt_norm'] = df_qb_adv_team.groupby('Year')['Team_OnTgt'].transform(lambda x: (x - x.mean()) / x.std())
+    return df_qb_adv
 
-    return df_qb_adv, df_qb_adv_team
-
-def evaluate_model(df, df_testing_year, df_training_year, target, model):
+def evaluate_model(df, df_testing_year, target, model_x):
     """
     This function evaluates a model by calculating r2 and mse. It will also create a df with the features and their coefficients
 
@@ -352,8 +360,6 @@ def evaluate_model(df, df_testing_year, df_training_year, target, model):
         The dataframe to use for the model
     df_testing_year : int
         The year to use for testing
-    df_training_year : int
-        The year to use for training
     target : str    
         The target variable
     model : object
@@ -362,20 +368,54 @@ def evaluate_model(df, df_testing_year, df_training_year, target, model):
     # Setting player as the index
     df = df.set_index('Player')
 
-    # Split the data into training and testing sets based on the year
-
-    # Compiling the training data if a list of years is passed
-    if type(df_training_year) == list:
-        df_train = df[df['Year'].isin(df_training_year)]
-    else:
-        df_train = df[df['Year'] == df_training_year]
-    
+    # Setting the training data to be all years except the testing year
+    df_train = df[df['Year'] != df_testing_year]
     df_test = df[df['Year'] == df_testing_year]
+
+    # Drop the year column
+    df_train = df_train.drop('Year', axis=1)
+    df_test = df_test.drop('Year', axis=1)
+
+    # Drop rows that have NaN values
+    df_train = df_train.dropna()
+    df_test = df_test.dropna()
     
     # Fit the model to the training data
     X_train = df_train.drop(target, axis=1)
     y_train = df_train[target]
-    model.fit(X_train, y_train)
+
+    # Create a pipeline for RandomForestRegressor
+    #pipe = Pipeline([('scaler', StandardScaler()), ('model', RandomForestRegressor())])
+    pipe = Pipeline([('scaler', StandardScaler()), ('model', model_x)])
+
+    # Creating grid search parameters selecting only significant parameters
+    if model_x == "XGBRegressor":    
+        param_grid = [{'model': [XGBRegressor()],
+                    'model__n_estimators': [25, 50, 75, 100],
+                    'model__max_depth': [10, 20, 30], 
+                    'model__learning_rate': [0.1, 0.01, 0.001],
+                    #'model__max_features': [1.0, 0.5, 0.3, 0.1],
+                    }]
+    elif model_x == "SVR":
+        param_grid = [{'model': [SVR()],
+                    'model__kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
+                    'model__C': [0.1, 1, 10, 100, 1000],
+                    'model__gamma': [1, 0.1, 0.01, 0.001, 0.0001]
+                    }]
+    elif model_x == "RandomForestRegressor":
+        param_grid = [{'model': [RandomForestRegressor()],
+                    'model__n_estimators': [25, 50, 75, 100],
+                    'model__max_depth': [10, 20, 30],
+                    'model__min_samples_split': [2, 5, 10],
+                    'model__min_samples_leaf': [1, 2, 5, 10],
+                    'model__max_features': [3, 4, 5, 6, 7]
+                    }]
+            
+    # Create grid search object, setting scoring to r2
+    grid = GridSearchCV(pipe, param_grid, cv=5, scoring='r2', n_jobs=-1)
+
+    # Fit the model
+    model = grid.fit(X_train, y_train)
     
     # Make predictions on the testing data
     X_test = df_test.drop(target, axis=1)
@@ -384,16 +424,24 @@ def evaluate_model(df, df_testing_year, df_training_year, target, model):
 
     # Calculate r2 and mse score
     r2 = r2_score(y_test, y_pred)
-    mse = mean_squared_error(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
     
     # Add the predicted values to the testing data frame
     df_test['Predicted'] = y_pred
 
     # Create a data frame with the features and their coefficients
-    df_coef = pd.DataFrame({'Feature': X_train.columns, 'Coefficient': model.feature_importances_})
+    if model_x == "XGBRegressor":
+        df_coef = pd.DataFrame({'Feature': X_train.columns, 'Coefficient': model.best_estimator_.named_steps['model'].feature_importances_})
+    elif model_x == "RandomForestRegressor":
+        df_coef = pd.DataFrame({'Feature': X_train.columns, 'Coefficient': model.best_estimator_.named_steps['model'].feature_importances_})
+    elif model_x == "SVR":
+        df_coef = 0
+
+    # Print the best parameters
+    best = grid.best_params_
     
     # Return the testing data frame and evaluation metrics
-    return df_test, r2, mse, df_coef
+    return df_test, r2, mae, df_coef, best, model
     
 def nfl_schedule_scrape(begin_year, end_year):
     """
@@ -467,18 +515,20 @@ def model_evaluation(df, df_testing_year, target, model):
     y_train = df_train[target]
 
     # Create a pipeline for RandomForestRegressor
+    #pipe = Pipeline([('scaler', StandardScaler()), ('model', RandomForestRegressor())])
     pipe = Pipeline([('scaler', StandardScaler()), ('model', RandomForestRegressor())])
 
-    # Creating grid search parameters
-    param_grid = [{'model': [RandomForestRegressor()], 
-                    'model__n_estimators': [25, 50, 100, 300], 
-                    'model__max_depth': [20, 30, 40],
-                    'model__min_samples_split': [4, 5, 6],
-                    'model__min_samples_leaf': [6, 8, 10],
-                    'model__max_features': ['log2']}]
+    # Creating grid search parameters selecting only significant parameters
+    param_grid = [{'model': [RandomForestRegressor()],
+                    'model__n_estimators': [25, 50, 75, 100],
+                    'model__max_depth': [10, 20, 30],
+                    'model__min_samples_split': [2, 5, 10], 
+                    'model__min_samples_leaf': [1, 2, 5, 10], 
+                    'model__max_features': ['log2']
+                    }]
     
-    # Create grid search object
-    grid = GridSearchCV(pipe, param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+    # Create grid search object, setting scoring to r2
+    grid = GridSearchCV(pipe, param_grid, cv=5, scoring='r2', n_jobs=-1)
 
     # Fit the model
     model = grid.fit(X_train, y_train)
@@ -552,3 +602,73 @@ def draft_scrape(begin_year, end_year):
         
     # Write the dataframe to a csv file
     df_draft.to_csv('draft.csv', index=False)
+
+def rb_adv_cleaning(begin_year, end_year):
+    # Cleaning adv_rush_2018 to get rid of all special characters in the player names
+    for x in range(begin_year, end_year + 1):
+        file_name = 'adv_rush_' + str(x) + '.xlsx'
+        df = pd.read_excel(file_name)
+        df['Year'] = x
+        if x == begin_year:
+            df_adv = df
+        else:
+            df_adv = df_adv.append(df)
+    df_adv['Player'] = df_adv['Player'].str.replace('*', '')
+    df_adv['Player'] = df_adv['Player'].str.replace('+', '')
+    df_adv['Player'] = df_adv['Player'].str.replace('\\', '')
+    df_adv['Player'] = df_adv['Player'].str.replace('\'', '')
+    df_adv['Tm'] = df_adv['Tm'].replace('GNB', 'GB')
+    df_adv['Tm'] = df_adv['Tm'].replace('KAN', 'KC')
+    df_adv['Tm'] = df_adv['Tm'].replace('NOR', 'NO')
+    df_adv['Tm'] = df_adv['Tm'].replace('SFO', 'SF')
+    df_adv['Tm'] = df_adv['Tm'].replace('TAM', 'TB')
+    df_adv['Tm'] = df_adv['Tm'].replace('LVR', 'LV')
+    df_adv['Tm'] = df_adv['Tm'].replace('NWE', 'NE')
+    df_adv = df_adv.drop(['Age', 'Pos', 'G', 'GS', 'Att', 'Yds'], axis=1)
+
+    #Write the dataframe to a csv file
+    df_adv.to_csv('adv_rush.csv', index=False)
+
+def rec_adv_cleaning(begin_year, end_year):
+    # Cleaning adv_rush_2018 to get rid of all special characters in the player names
+    for x in range(begin_year, end_year + 1):
+        file_name = 'rec_adv_' + str(x) + '.xls'
+        #Reading file with html xml parser
+        df = pd.read_html(file_name)[0]
+        df['Year'] = x
+        if x == begin_year:
+            df_adv = df
+        else:
+            df_adv = df_adv.append(df)
+    df_adv['Player'] = df_adv['Player'].str.replace('*', '')
+    df_adv['Player'] = df_adv['Player'].str.replace('+', '')
+    df_adv['Player'] = df_adv['Player'].str.replace('\\', '')
+    df_adv['Player'] = df_adv['Player'].str.replace('\'', '')
+    df_adv['Tm'] = df_adv['Tm'].replace('GNB', 'GB')
+    df_adv['Tm'] = df_adv['Tm'].replace('KAN', 'KC')
+    df_adv['Tm'] = df_adv['Tm'].replace('NOR', 'NO')
+    df_adv['Tm'] = df_adv['Tm'].replace('SFO', 'SF')
+    df_adv['Tm'] = df_adv['Tm'].replace('TAM', 'TB')
+    df_adv['Tm'] = df_adv['Tm'].replace('LVR', 'LV')
+    df_adv['Tm'] = df_adv['Tm'].replace('NWE', 'NE')
+    df_adv = df_adv.drop(['Age', 'Pos', 'G', 'GS', 'Tgt', 'Rec', 'Yds', 'TD'], axis=1)
+
+    #Write the dataframe to a csv file
+    df_adv.to_csv('adv_rec.csv', index=False)
+
+#adv_acc = qb_adv_stats(2019, 2022, 'advanced_accuracy')
+#adv_air = qb_adv_stats(2019, 2022, 'advanced_air_yards')
+#adv_press = qb_adv_stats(2019, 2022, 'advanced_pressure')
+
+#Dropping Age, Pos, G, GS, Cmp, Att and Yds for each dataframe then merging them together
+#adv_acc = adv_acc.drop(['Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds'], axis=1)
+#adv_air = adv_air.drop(['Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds'], axis=1)
+#adv_press = adv_press.drop(['Age', 'Pos', 'G', 'GS', 'Cmp', 'Att', 'Yds'], axis=1)
+
+#adv_qb = pd.merge(adv_acc, adv_air, on=['Player', 'Tm', 'Year'])
+#adv_qb = pd.merge(adv_qb, adv_press, on=['Player', 'Tm', 'Year'])
+
+#Putting adv_qb to csv
+#adv_qb.to_csv('adv_qb.csv', index=False)
+
+#Putting adv_qb to csv

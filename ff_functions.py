@@ -22,89 +22,88 @@ from sklearn.decomposition import PCA
 from xgboost import XGBRegressor
 from sklearn.svm import SVR
 import xlrd
+from playwright.sync_api import sync_playwright
+from tqdm import tqdm
+import time
 
 def player_scrape(begin_year, end_year):
     """
-    This function will scrape data from pro-football-reference.com, loop through the begin_year to end_year seasons
-    and returns a 4 dataframe with the data. The dataframes are qb_df, rb_df, wr_df, and te_df.
-
-    Parameters:
-    ----------
-    begin_year : int
-        The first year to scrape data from
-    end_year : int 
-        The last year to scrape data from
-
-    Returns:
-    -------
-    dataframe
-        4 dataframes with the data scraped from pro-football-reference.com
+    Scrapes fantasy football data from pro-football-reference.com using Playwright
+    from begin_year to end_year. Returns 4 DataFrames: QB, RB, WR, TE.
     """
-    for x in range(begin_year, end_year + 1):
-        url = 'https://www.pro-football-reference.com/years/' + str(x) + '/fantasy.htm'
-        page = requests.get(url)
-        soup = BeautifulSoup(page.text, 'html.parser')
-        table = soup.find('table', {'id': 'fantasy'})
-        table_head = table.find('thead')
-        table_body = table.find('tbody')
-        table_head_rows = table_head.find_all('tr')
-        table_body_rows = table_body.find_all('tr')
-        column_headers = ['Rk', 'Player', 'Tm', 'FantPos', 'Age', 'G', 'GS', 'Cmp', 'Att_pass', 'Yds_pass', 'TD_pass', 'Int_pass', 'Att_rush', 'Yds_rush', 'Y/A', 'TD_rush', 'Tgt', 'Rec', 'Yds_rec', 'Y/R', 'TD_rec', 'Fmb', 'FL', 'TD_total', '2PM', '2PP', 'FantPt', 'PPR', 'DKPt', 'FDPt', 'VBD', 'PosRank', 'OvRank']
-        data_rows = [[td.getText() for td in table_body_rows[i].find_all('td')] for i in range(len(table_body_rows))]
-        df = pd.DataFrame(data_rows, columns=column_headers[1:])
-        df = df.dropna()
-        df = df.replace('', 0)
-        df = df.apply(pd.to_numeric, errors='ignore')
-        df['Year'] = x
-        if x == begin_year:
-            df_all = df
-        else:
-            df_all = df_all.append(df)
-    df_all['Tm'] = df_all['Tm'].replace('GNB', 'GB')
-    df_all['Tm'] = df_all['Tm'].replace('KAN', 'KC')
-    df_all['Tm'] = df_all['Tm'].replace('NOR', 'NO')
-    df_all['Tm'] = df_all['Tm'].replace('SFO', 'SF')
-    df_all['Tm'] = df_all['Tm'].replace('TAM', 'TB')
-    df_all['Tm'] = df_all['Tm'].replace('LVR', 'LV')
-    df_all['Tm'] = df_all['Tm'].replace('NWE', 'NE')
-    df_all = df_all.apply(pd.to_numeric, errors='ignore')
 
-    # Grouping data by team and year to get sum of TD and Tgt
-    df_all['Team_Yds'] = df_all.groupby(['Tm', 'Year'])['Yds_pass'].transform('sum') + df_all.groupby(['Tm', 'Year'])['Yds_rush'].transform('sum')
+    column_headers = [
+        'Rk', 'Player', 'Tm', 'FantPos', 'Age', 'G', 'GS',
+        'Cmp', 'Att_pass', 'Yds_pass', 'TD_pass', 'Int_pass',
+        'Att_rush', 'Yds_rush', 'Y/A', 'TD_rush', 'Tgt', 'Rec',
+        'Yds_rec', 'Y/R', 'TD_rec', 'Fmb', 'FL', 'TD_total', '2PM',
+        '2PP', 'FantPt', 'PPR', 'DKPt', 'FDPt', 'VBD', 'PosRank', 'OvRank'
+    ]
+
+    df_all = pd.DataFrame()
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        for year in range(begin_year, end_year + 1):
+            url = f"https://www.pro-football-reference.com/years/{year}/fantasy.htm"
+            print(f"Scraping {url} ...")
+
+            try:
+                page.goto(url, timeout=60000)
+                time.sleep(2)  # allow page to fully load
+                soup = BeautifulSoup(page.content(), 'html.parser')
+                table = soup.find('table', {'id': 'fantasy'})
+
+                if table is None:
+                    print(f"⚠️ Table not found for year {year}")
+                    continue
+
+                table_body = table.find('tbody')
+                rows = table_body.find_all('tr')
+                data_rows = [[td.get_text(strip=True) for td in row.find_all('td')] for row in rows if row.find_all('td')]
+
+                df = pd.DataFrame(data_rows, columns=column_headers[1:])
+                df = df.replace('', 0)
+                df = df.apply(pd.to_numeric, errors='ignore')
+                df['Year'] = year
+                df_all = pd.concat([df_all, df], ignore_index=True)
+
+            except Exception as e:
+                print(f"❌ Error scraping year {year}: {e}")
+                continue
+
+        browser.close()
+
+    if df_all.empty:
+        raise ValueError("No data was scraped. Check network connection or website structure.")
+
+    # Clean team names
+    team_replacements = {
+        'GNB': 'GB', 'KAN': 'KC', 'NOR': 'NO', 'SFO': 'SF',
+        'TAM': 'TB', 'LVR': 'LV', 'NWE': 'NE'
+    }
+    df_all['Tm'] = df_all['Tm'].replace(team_replacements)
+
+    # Compute team aggregates
+    df_all['Team_Yds'] = df_all.groupby(['Tm', 'Year'])['Yds_pass'].transform('sum') + \
+                         df_all.groupby(['Tm', 'Year'])['Yds_rush'].transform('sum')
     df_all['Team_Tgt'] = df_all.groupby(['Tm', 'Year'])['Tgt'].transform('sum')
-
-    # Grouping data by team and year to get sum of Att_rush and Yds_rush
     df_all['Team_Att_rush'] = df_all.groupby(['Tm', 'Year'])['Att_rush'].transform('sum')
     df_all['Team_Yds_rush'] = df_all.groupby(['Tm', 'Year'])['Yds_rush'].transform('sum')
 
-    df_qb = df_all[df_all['FantPos'] == 'QB']
-    #df_qb = df_qb[['Player', 'Tm', 'Age', 'Yds_pass', 'Yds_rush', 'TD_pass', 'TD_rush', 'VBD', 'PPR', 'Year']]
-    df_qb = df_qb.reset_index(drop=True)
-    df_rb = df_all[df_all['FantPos'] == 'RB']
-    #df_rb = df_rb[['Player', 'Tm', 'Age', 'Att_rush', 'Tgt', 'TD_rush', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
-    df_rb = df_rb.reset_index(drop=True)
-    df_wr = df_all[df_all['FantPos'] == 'WR']
-    #df_wr = df_wr[['Player', 'Tm', 'Age', 'Tgt', 'Rec', 'TD_rec', 'Yds_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
-    df_wr = df_wr.reset_index(drop=True)
-    df_te = df_all[df_all['FantPos'] == 'TE']
-    #df_te = df_te[['Player', 'Tm', 'Age', 'Tgt', 'TD_rec', 'Team_Yds', 'Team_Tgt', 'VBD', 'PPR', 'Year']]
-    df_te = df_te.reset_index(drop=True)
+    # Split by position
+    df_qb = df_all[df_all['FantPos'] == 'QB'].reset_index(drop=True)
+    df_rb = df_all[df_all['FantPos'] == 'RB'].reset_index(drop=True)
+    df_wr = df_all[df_all['FantPos'] == 'WR'].reset_index(drop=True)
+    df_te = df_all[df_all['FantPos'] == 'TE'].reset_index(drop=True)
 
-    # Removing the symbols "*" and "+" from the player names using a loop
-    for i in range(len(df_qb)):
-        df_qb['Player'][i] = df_qb['Player'][i].replace('*', '')
-        df_qb['Player'][i] = df_qb['Player'][i].replace('+', '')
-    for i in range(len(df_rb)):
-        df_rb['Player'][i] = df_rb['Player'][i].replace('*', '')
-        df_rb['Player'][i] = df_rb['Player'][i].replace('+', '')
-    for i in range(len(df_wr)):
-        df_wr['Player'][i] = df_wr['Player'][i].replace('*', '')
-        df_wr['Player'][i] = df_wr['Player'][i].replace('+', '')
-    for i in range(len(df_te)):
-        df_te['Player'][i] = df_te['Player'][i].replace('*', '')
-        df_te['Player'][i] = df_te['Player'][i].replace('+', '')
+    # Clean player names
+    for df in [df_qb, df_rb, df_wr, df_te]:
+        df['Player'] = df['Player'].str.replace('*', '', regex=False).str.replace('+', '', regex=False)
 
-    # Write the dataframes to csv files
+    # Export to CSV
     df_qb.to_csv('qb.csv', index=False)
     df_rb.to_csv('rb.csv', index=False)
     df_wr.to_csv('wr.csv', index=False)
@@ -200,70 +199,139 @@ def team_def_scrape(begin_year, end_year):
 
 def redzone_scrape(begin_year, end_year):
     """
-    This function scrapes https://www.pro-football-reference.com/years/ for redzone passing, rushing, receiving and defense data
-
+    This function scrapes https://www.pro-football-reference.com/years/ for redzone passing, rushing, receiving and defense data 
+    
     Parameters:
     ----------
     begin_year : int
         The first year to scrape data from
     end_year : int
         The last year to scrape data from
-
+    
     Returns:
     -------
     df : DataFrame
         A dataframe with the compiled redzone data
     """
+    
+    # Add headers to avoid being blocked
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
     # Creating a for loop to go through passing, rushing and receiving data
     for y in ['passing', 'rushing', 'receiving']:
         if y == 'passing':
             column_headers = ['Tm', 'Cmp_20', 'Att_20', 'Cmp%_20', 'Yds_20', 'TD_20', 'Int_20', 'Cmp_10', 'Att_10', 'Cmp%_10', 'Yds_10', 'TD_10', 'Int_10', 'Highlights']
         elif y == 'rushing':
-            column_headers = ['Tm', 'Att_20', 'Yds_20', 'TD_20', '%Rush_20', 'Att_10', 'Yds_10', 'TD_10', '%Rush_10', 'Att_5', 'Yrds_5', 'TD_5', '%Rush_5', 'Highlights']
+            column_headers = ['Tm', 'Att_20', 'Yds_20', 'TD_20', '%Rush_20', 'Att_10', 'Yds_10', 'TD_10', '%Rush_9', 'Att_5', 'Yds_5', 'TD_5', '%Rush_5', 'Highlights']
         else:
             column_headers = ['Tm', 'Tgt_20', 'Rec_20', 'Ctch%_20', 'Yds_20', 'TD_20', '%Tgt_20', 'Tgt_10', 'Rec_10', 'Ctch%_10', 'Yds_10', 'TD_10', '%Tgt_10', 'Highlights']
         
+        df_name = None  # Initialize df_name
+        
         for x in range(begin_year, end_year + 1):
-            url = 'https://www.pro-football-reference.com/years/' + str(x) + '/redzone-' + str(y) + '.htm'
-            page = requests.get(url)
-            soup = BeautifulSoup(page.text, 'html.parser')
-            table = soup.find('table', {'id': 'fantasy_rz'})
-            table_head = table.find('thead')
-            table_body = table.find('tbody')
-            table_head_rows = table_head.find_all('tr')
-            table_body_rows = table_body.find_all('tr')
-            data_rows_player = [[td.getText() for td in table_body_rows[i].find_all('th')] for i in range(len(table_body_rows))]
-            data_rows = [[td.getText() for td in table_body_rows[i].find_all('td')] for i in range(len(table_body_rows))]
-            df = pd.DataFrame(data_rows, columns=column_headers[0:])
-            df_player = pd.DataFrame(data_rows_player, columns=['Player'])
-            df['Player'] = df_player['Player']
-            df = df.dropna()
-            df = df.replace('', 0)
-            df = df.apply(pd.to_numeric, errors='ignore')
-            df['Year'] = x
-            if x == begin_year:
-                df_name = df
-            else:
-                df_name = df_name.append(df)
-            df_name['Tm'] = df_name['Tm'].replace('GNB', 'GB')
-            df_name['Tm'] = df_name['Tm'].replace('KAN', 'KC')
-            df_name['Tm'] = df_name['Tm'].replace('NOR', 'NO')
-            df_name['Tm'] = df_name['Tm'].replace('SFO', 'SF')
-            df_name['Tm'] = df_name['Tm'].replace('TAM', 'TB')
-            df_name['Tm'] = df_name['Tm'].replace('LVR', 'LV')
-            df_name['Tm'] = df_name['Tm'].replace('NWE', 'NE')
+            url = f'https://www.pro-football-reference.com/years/{x}/redzone-{y}.htm'
+            print(f"Scraping: {url}")
+            
+            try:
+                # Add delay between requests to be respectful
+                time.sleep(1)
+                
+                page = requests.get(url, headers=headers, timeout=10)
+                page.raise_for_status()  # Raises an HTTPError for bad responses
+                
+                soup = BeautifulSoup(page.text, 'html.parser')
+                table = soup.find('table', {'id': 'fantasy_rz'})
+                
+                # Check if table exists
+                if table is None:
+                    print(f"Warning: No table found for {y} in {x}")
+                    # Try alternative table IDs
+                    possible_ids = ['redzone', 'rz_stats', 'stats_table']
+                    for alt_id in possible_ids:
+                        table = soup.find('table', {'id': alt_id})
+                        if table is not None:
+                            print(f"Found table with ID: {alt_id}")
+                            break
+                    
+                    if table is None:
+                        # Try finding table by class or other attributes
+                        table = soup.find('table', {'class': 'stats_table'})
+                        if table is None:
+                            print(f"Skipping {y} for year {x} - no table found")
+                            continue
+                
+                table_head = table.find('thead')
+                table_body = table.find('tbody')
+                
+                if table_body is None:
+                    print(f"Warning: No table body found for {y} in {x}")
+                    continue
+                
+                table_body_rows = table_body.find_all('tr')
+                
+                if not table_body_rows:
+                    print(f"Warning: No data rows found for {y} in {x}")
+                    continue
+                
+                # Extract data
+                data_rows_player = [[td.getText() for td in table_body_rows[i].find_all('th')] for i in range(len(table_body_rows))]
+                data_rows = [[td.getText() for td in table_body_rows[i].find_all('td')] for i in range(len(table_body_rows))]
+                
+                # Create dataframes
+                df = pd.DataFrame(data_rows, columns=column_headers[:len(data_rows[0]) if data_rows else 0])
+                df_player = pd.DataFrame(data_rows_player, columns=['Player'])
+                df['Player'] = df_player['Player']
+                df = df.dropna()
+                df = df.replace('', 0)
+                df = df.apply(pd.to_numeric, errors='ignore')
+                df['Year'] = x
+                
+                # Standardize team names
+                team_replacements = {
+                    'GNB': 'GB', 'KAN': 'KC', 'NOR': 'NO', 'SFO': 'SF',
+                    'TAM': 'TB', 'LVR': 'LV', 'NWE': 'NE'
+                }
+                df['Tm'] = df['Tm'].replace(team_replacements)
+                
+                # Append to main dataframe
+                if df_name is None:
+                    df_name = df
+                else:
+                    df_name = pd.concat([df_name, df], ignore_index=True)
+                
+                print(f"Successfully scraped {len(df)} rows for {y} in {x}")
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching {url}: {e}")
+                continue
+            except Exception as e:
+                print(f"Error processing {y} for year {x}: {e}")
+                continue
+        
+        # Store the dataframe for each category
         if y == 'passing':
-            df_rz_pass = df_name
+            df_rz_pass = df_name if df_name is not None else pd.DataFrame()
         elif y == 'rushing':
-            df_rz_rush = df_name
-        else:   
-            df_rz_rec = df_name
-
+            df_rz_rush = df_name if df_name is not None else pd.DataFrame()
+        else:
+            df_rz_rec = df_name if df_name is not None else pd.DataFrame()
+    
     # Write the dataframes to csv files
-    df_rz_pass.to_csv('rz_pass.csv', index=False)
-    df_rz_rush.to_csv('rz_rush.csv', index=False)
-    df_rz_rec.to_csv('rz_rec.csv', index=False)
-
+    try:
+        if not df_rz_pass.empty:
+            df_rz_pass.to_csv('rz_pass.csv', index=False)
+            print("Saved rz_pass.csv")
+        if not df_rz_rush.empty:
+            df_rz_rush.to_csv('rz_rush.csv', index=False)
+            print("Saved rz_rush.csv")
+        if not df_rz_rec.empty:
+            df_rz_rec.to_csv('rz_rec.csv', index=False)
+            print("Saved rz_rec.csv")
+    except Exception as e:
+        print(f"Error saving CSV files: {e}")
+    
     return df_rz_pass, df_rz_rush, df_rz_rec
 
 def nfl_schedule(begin_year, end_year):
@@ -352,96 +420,119 @@ def qb_adv_stats(begin_year, end_year, table_id):
 
 def evaluate_model(df, df_testing_year, target, model_x):
     """
-    This function evaluates a model by calculating r2 and mse. It will also create a df with the features and their coefficients
+    Evaluates a predictive model and returns predictions, performance metrics, and model object.
 
     Parameters:
     ----------
     df : DataFrame
-        The dataframe to use for the model
+        The dataframe to use for training and testing.
     df_testing_year : int
-        The year to use for testing
+        The year to use for testing.
     target : str    
-        The target variable
-    model : object
-        The model to use for the evaluation
+        The target variable.
+    model_x : str
+        One of: "SVR", "RandomForestRegressor", "XGBRegressor"
+
+    Returns:
+    -------
+    df_test : DataFrame with predictions
+    r2 : float
+    mae : float
+    df_coef : DataFrame of feature importances (or 0 for SVR)
+    best : dict of best hyperparameters
+    model : trained model
     """
-    # Setting player as the index
-    df = df.set_index('Player')
+    print("\n🔧 Starting model evaluation...\n")
+    start_time = time.time()
 
-    # Setting the training data to be all years except the testing year
-    df_train = df[df['Year'] != df_testing_year]
-    df_test = df[df['Year'] == df_testing_year]
+    # Ensure the dataframe is not modified in place
+    df = df.copy()
 
-    # Drop the year column
-    df_train = df_train.drop('Year', axis=1)
-    df_test = df_test.drop('Year', axis=1)
+    # Set index
+    df.set_index('Player', inplace=True)
 
-    # Drop rows that have NaN values
-    df_train = df_train.dropna()
-    df_test = df_test.dropna()
-    
-    # Fit the model to the training data
-    X_train = df_train.drop(target, axis=1)
+    print("📦 Splitting training and testing sets...")
+    df_train = df[df['Year'] != df_testing_year].drop(columns=['Year'])
+    df_test = df[df['Year'] == df_testing_year].drop(columns=['Year'])
+
+    print("🧹 Dropping missing values...")
+    df_train.dropna(inplace=True)
+    df_test.dropna(inplace=True)
+
+    print("🔍 Selecting numeric features...")
+    X_train = df_train.drop(columns=[target])
     y_train = df_train[target]
 
-    # Create a pipeline for RandomForestRegressor
-    #pipe = Pipeline([('scaler', StandardScaler()), ('model', RandomForestRegressor())])
-    pipe = Pipeline([('scaler', StandardScaler()), ('model', model_x)])
-
-    # Creating grid search parameters selecting only significant parameters
-    if model_x == "XGBRegressor":    
-        param_grid = [{'model': [XGBRegressor()],
-                    'model__n_estimators': [25, 50, 75, 100],
-                    'model__max_depth': [10, 20, 30], 
-                    'model__learning_rate': [0.1, 0.01, 0.001],
-                    #'model__max_features': [1.0, 0.5, 0.3, 0.1],
-                    }]
-    elif model_x == "SVR":
-        param_grid = [{'model': [SVR()],
-                    'model__kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
-                    'model__C': [0.1, 1, 10, 100, 1000],
-                    'model__gamma': [1, 0.1, 0.01, 0.001, 0.0001]
-                    }]
-    elif model_x == "RandomForestRegressor":
-        param_grid = [{'model': [RandomForestRegressor()],
-                    'model__n_estimators': [25, 50, 75, 100],
-                    'model__max_depth': [10, 20, 30],
-                    'model__min_samples_split': [2, 5, 10],
-                    'model__min_samples_leaf': [1, 2, 5, 10],
-                    'model__max_features': [3, 4, 5, 6, 7]
-                    }]
-            
-    # Create grid search object, setting scoring to r2
-    grid = GridSearchCV(pipe, param_grid, cv=5, scoring='r2', n_jobs=-1)
-
-    # Fit the model
-    model = grid.fit(X_train, y_train)
+    # Ensure X_train is numeric
+    X_train = X_train.select_dtypes(include=[np.number])
     
-    # Make predictions on the testing data
-    X_test = df_test.drop(target, axis=1)
+    print(f"🧠 Model selected: {model_x}")
+    if model_x == "XGBRegressor":
+        param_grid = [{
+            'model': [XGBRegressor()],
+            'model__n_estimators': [25, 50],
+            'model__max_depth': [5, 10],
+            'model__learning_rate': [0.1, 0.01],
+        }]
+    elif model_x == "SVR":
+        param_grid = [{
+            'model': [SVR()],
+            'model__kernel': ['linear', 'rbf'],
+            'model__C': [1, 10],
+            'model__gamma': ['scale', 'auto']
+        }]
+    elif model_x == "RandomForestRegressor":
+        param_grid = [{
+            'model': [RandomForestRegressor()],
+            'model__n_estimators': [50, 100],
+            'model__max_depth': [10, 20],
+            'model__min_samples_split': [2, 5],
+            'model__min_samples_leaf': [1, 2],
+        }]
+
+    pipe = Pipeline([
+        ('scaler', StandardScaler()),
+        ('model', SVR() if model_x == "SVR" else RandomForestRegressor())
+    ])
+
+    print("🔄 Running GridSearchCV...")
+    grid = GridSearchCV(pipe, param_grid, cv=3, scoring='r2', n_jobs=-1, verbose=1)
+    model = grid.fit(X_train, y_train)
+
+    print("✅ Grid search complete. Best parameters:")
+    print(model.best_params_)
+
+    print("📈 Generating predictions...")
+    X_test = df_test.drop(columns=[target])
     y_test = df_test[target]
+
+    # Match X_test to training features
+    trained_features = model.best_estimator_.named_steps['scaler'].feature_names_in_
+    X_test = X_test.reindex(columns=trained_features, fill_value=0)
+
     y_pred = model.predict(X_test)
 
-    # Calculate r2 and mse score
+    print("🧮 Calculating evaluation metrics...")
     r2 = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
-    
-    # Add the predicted values to the testing data frame
+
+    print(f"🎯 R-squared: {r2:.4f}")
+    print(f"📉 Mean Absolute Error: {mae:.4f}")
+
+    print("📊 Attaching predictions to test set...")
     df_test['Predicted'] = y_pred
 
-    # Create a data frame with the features and their coefficients
-    if model_x == "XGBRegressor":
-        df_coef = pd.DataFrame({'Feature': X_train.columns, 'Coefficient': model.best_estimator_.named_steps['model'].feature_importances_})
-    elif model_x == "RandomForestRegressor":
-        df_coef = pd.DataFrame({'Feature': X_train.columns, 'Coefficient': model.best_estimator_.named_steps['model'].feature_importances_})
-    elif model_x == "SVR":
+    print("🧾 Extracting feature importances...")
+    if model_x in ["XGBRegressor", "RandomForestRegressor"]:
+        importances = model.best_estimator_.named_steps['model'].feature_importances_
+        df_coef = pd.DataFrame({'Feature': trained_features, 'Coefficient': importances})
+    else:
         df_coef = 0
 
-    # Print the best parameters
-    best = grid.best_params_
-    
-    # Return the testing data frame and evaluation metrics
-    return df_test, r2, mae, df_coef, best, model
+    elapsed_time = time.time() - start_time
+    print(f"✅ Model evaluation completed in {elapsed_time:.2f} seconds.\n")
+
+    return df_test, r2, mae, df_coef, model.best_params_, model
     
 def nfl_schedule_scrape(begin_year, end_year):
     """

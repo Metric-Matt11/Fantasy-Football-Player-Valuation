@@ -15,13 +15,85 @@ from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.preprocessing import PolynomialFeatures
 import ff_functions as ff
+from pathlib import Path
+import os
 
 # Creating dataframes for each position, defense, and schedule
-df_qb, df_rb, df_wr, df_te = ff.player_scrape(2019, 2022)
-df_def = ff.team_def_scrape(2019, 2022)
-df_schedule = ff.nfl_schedule(2019, 2022)
-df_qb_adv, df_qb_adv_team = ff.qb_adv_stats(2019, 2022)
-df_rz_pass, df_rz_rush, df_rz_rec = ff.redzone_scrape(2019, 2022)
+#df_qb, df_rb, df_wr, df_te = ff.player_scrape(2019, 2022)
+#df_def = ff.team_def_scrape(2019, 2022)
+#df_schedule = ff.nfl_schedule(2019, 2022)
+#df_qb_adv, df_qb_adv_team = ff.qb_adv_stats(2022, 2024) ----------------NEED TO LOAD
+#df_rz_pass, df_rz_rush, df_rz_rec = ff.redzone_scrape(2022, 2024) ------NEED TO LOAD
+
+# Define possible directories
+possible_paths = [
+    Path.home() / "OneDrive - WellSky" / "Documents" / "Python Projects" / "FF",
+    Path.home() / "Documents" / "Python Projects" / "Fantasy football"
+]
+
+# Find the correct path
+project_dir = None
+for p in possible_paths:
+    if p.exists():
+        project_dir = p
+        break
+
+if not project_dir:
+    raise FileNotFoundError("No valid project folder found.")
+
+# Change working directory
+os.chdir(project_dir)
+print(f"Working in: {os.getcwd()}")
+
+# List of files to load
+files = {
+    "df_wr": "wr",
+    "df_te": "te",
+    "df_qb": "qb",
+    "df_rb": "rb",
+    "df_def": "team_def",
+    #"adv_rec": "adv_rec.csv",
+    "schedule_2022": "nfl_schedule_2022",
+    "schedule_2023": "nfl_schedule_2023",
+    "schedule_2024": "nfl_schedule_2024"
+}
+
+# Read CSVs into a dictionary of DataFrames
+data = {}
+for key, base_name in files.items():
+    csv_path = project_dir / f"{base_name}.csv"
+    xlsx_path = project_dir / f"{base_name}.xlsx"
+
+    if csv_path.exists():
+        data[key] = pd.read_csv(csv_path)
+        print(f"Loaded CSV: {csv_path.name}")
+    elif xlsx_path.exists():
+        data[key] = pd.read_excel(xlsx_path)
+        print(f"Loaded XLSX: {xlsx_path.name}")
+    else:
+        print(f"⚠️ File not found: {base_name}.csv or {base_name}.xlsx")
+
+df_wr = data.get("wr")
+df_qb = data.get("qb")
+df_rb = data.get("rb")
+df_te = data.get("te")
+
+years = [2022, 2023, 2024]
+df_list = []
+
+for year in years:
+    df = data.get(f"schedule_{year}")
+    if df is None:
+        print(f"⚠️ Missing schedule file for {year}")
+        continue
+
+    # Add Year column
+    df['Year'] = year
+    df_list.append(df)
+
+# Combine all into one DataFrame
+df_schedule = pd.concat(df_list, ignore_index=True)
+
 
 #Dropping players whose team is not in the nfl_schedule dataframe
 #This should drop players with no team or multiple teams
@@ -29,6 +101,8 @@ df_qb = df_qb[df_qb['Tm'].isin(df_schedule['TEAM'])]
 df_rb = df_rb[df_rb['Tm'].isin(df_schedule['TEAM'])]
 df_wr = df_wr[df_wr['Tm'].isin(df_schedule['TEAM'])]
 df_te = df_te[df_te['Tm'].isin(df_schedule['TEAM'])]
+
+#########################GOT TO HERE
 
 # Joining df_qb_adv to df_qb on player and year
 df_qb = df_qb.merge(df_qb_adv[['Player', 'Year', 'OnTgt']], how='left', left_on=['Player', 'Year'], right_on=['Player', 'Year'])
